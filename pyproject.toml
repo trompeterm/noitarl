@@ -1,0 +1,32 @@
+[project]
+name = "noitarl"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "black>=23.0.0",
+    "flake8>=6.0.0",
+    "gymnasium>=0.29.0",
+    "loguru>=0.7.0",
+    "matplotlib>=3.8.0",
+    "mss>=9.0.0",
+    "mypy>=1.5.0",
+    "numpy>=1.26.0",
+    "pillow>=10.0.0",
+    "pydantic-settings>=2.3.0",
+    "pygetwindow>=0.0.9",
+    "pynput>=1.7.6",
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "python-dotenv>=1.0.0",
+    "requests>=2.31.0",
+    "rich>=13.7.0",
+    "shimmy>=2.0.0",
+    "stable-baselines3[extra]>=2.3.0",
+    "tensorboard>=2.16.0",
+    "torch>=2.2.0",
+    "urllib3>=2.2.0",
+    "wandb>=0.17.0",
+    "websockets>=12.0",
+]
