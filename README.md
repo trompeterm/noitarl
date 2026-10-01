@@ -129,6 +129,18 @@ python train.py --fresh
 python eval.py checkpoints\your_run_final.zip
 ```
 
+### 6. Smoke-test the env (before long training)
+
+Use a **short** run in `.env`: `TOTAL_TIMESTEPS=5000`, `N_STEPS=256`, `CV_ENABLED=false`.
+
+1. `python train.py --fresh` → connect Noita → **New Game**, in the world.
+2. **Do not play with the keyboard** — the agent drives via velocity, not WASD.
+3. Watch the green **RL AGENT** HUD (top-left): action labels **Idle / Left / Right / …**
+   - Untrained PPO often picks **Idle** a lot; that looks like “won’t move” but is normal.
+   - **Bug** if HUD says **Left** or **Right** for many steps on flat ground and the body still does not slide.
+
+Gravity always pulls down, so vertical motion can look “alive” even when the move head is mostly Idle.
+
 ### Configuration
 
 Settings load from environment variables and `.env` ([config.py](config.py)):
