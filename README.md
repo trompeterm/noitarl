@@ -50,46 +50,96 @@ Train an AI agent to play **Noita** — the physics-based roguelike — using re
 
 ### Prerequisites
 
-- **Python 3.10+**
-- **Noita** (Steam) — must be installed and launched at least once
-- **Windows** (for `pollnet.dll` integration)
+- **Python 3.10+** (Windows; Linux needs `pollnet.so` — not bundled yet)
+- **Noita installed via Steam** — the game must be on disk (`Noita.exe`); signing into Steam in-game is normal, but **no Steam API keys go in `.env`**
+- **Git LFS** — `bin/pollnet.dll` is stored in LFS; without it the mod cannot connect
 
-### Installation
+### 1. Clone and install Python deps
 
-```bash
-# Clone the repository
+```powershell
 git clone https://github.com/yava-code/noitarl.git
 cd noitarl
+git lfs install
+git lfs pull
 
-# Install dependencies
-pip install -r requirements.txt
-
-# Copy and configure environment
-cp .env.example .env
-# Edit .env with your Noita path and training settings
+python -m pip install -r requirements.txt
+copy .env.example .env
 ```
 
-### Training
+Optional `.env` tweaks for first runs: `CV_ENABLED=false` (default), `TOTAL_TIMESTEPS=10000` for a short smoke test. Telegram, W&B, and Azure can stay empty.
 
-```bash
-# Start training
-python train.py
+### 2. Install the mod into Noita
 
-# Evaluate a trained model
-python eval.py --checkpoint checkpoints/latest.pt
+The trainer does **not** auto-install the mod. Noita only loads mods from its `mods\` folder.
+
+**Option A — junction (dev):** from repo root, after Noita is installed:
+
+```powershell
+.\scripts\install_mod.ps1 -NoitaRoot "C:\Program Files (x86)\Steam\steamapps\common\Noita"
+```
+
+Or run `.\scripts\install_mod.ps1` with no args to search Steam libraries.
+
+**Option B — copy:** copy this entire repo (or at least `init.lua`, `mod.xml`, `port.txt`, `lib\`, `bin\`) to:
+
+`Steam\steamapps\common\Noita\mods\noitarl\`
+
+Ensure `port.txt` contains `5001` (must match `NOITA_BASE_PORT` in `.env` / [config.py](config.py)).
+
+### 3. Enable the mod in Noita
+
+1. Main menu → **Mods**.
+2. Scroll down → **Enable unsafe mods: On** (required — this mod uses `request_no_api_restrictions` for WebSocket/pollnet).
+3. Check **`[x]`** on **RL Agent MVP**.
+4. Accept the modding agreement; **restart Noita** if prompted.
+
+### 4. Connect (test before training)
+
+**Order matters:** start Python **first**, then launch the game.
+
+```powershell
+python wait_for_noita.py
+```
+
+Then start Noita → mod enabled → **New Game** → enter the world (not only the title screen).
+
+Success:
+
+```text
+OK: Noita connected and sending state.
+```
+
+If it fails, read `Noita\mods\noitarl\logger.txt`. Common issues:
+
+| Symptom | Fix |
+|---------|-----|
+| `pollnet.dll` / **not a valid Win32 application** | Run `git lfs pull` in the repo (DLL was an LFS pointer stub) |
+| `Socket error #1` | Start `wait_for_noita.py` **before** Noita; keep the terminal open |
+| Mod list shows privileges warning | Enable **unsafe mods** on the Mods screen |
+
+### 5. Training
+
+```powershell
+python train.py --fresh
+```
+
+`train.py` waits for the mod to connect (same as step 4) before PPO starts. Checkpoints are `.zip` files under `checkpoints/`.
+
+```powershell
+python eval.py checkpoints\your_run_final.zip
 ```
 
 ### Configuration
 
-Key settings in `config.py`:
+Settings load from environment variables and `.env` ([config.py](config.py)):
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `NOITA_PATH` | Auto-detect | Path to Noita installation |
-| `LEARNING_RATE` | 3e-4 | PPO learning rate |
-| `GAMMA` | 0.99 | Discount factor |
-| `BATCH_SIZE` | 256 | Training batch size |
-| `MAX_STEPS` | 10_000_000 | Total training steps |
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `NOITA_BASE_PORT` | `5001` | WebSocket port (match `port.txt` in mod) |
+| `CV_ENABLED` | `false` | `true` = screen capture + CNN (slower; needs visible Noita window) |
+| `TOTAL_TIMESTEPS` | `1000000` | PPO training length |
+| `LEARNING_RATE` | `1e-4` in code / `.env.example` may override | PPO learning rate |
+| `WANDB_ENABLED` | `false` | Optional experiment tracking |
 
 ---
 

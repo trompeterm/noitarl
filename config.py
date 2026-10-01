@@ -42,7 +42,7 @@ class Config(BaseSettings):
     max_grad_norm: float = Field(0.5,  gt=0.0)
 
     # ── Computer Vision (image obs branch) ───────────────────────────────────
-    cv_enabled: bool      = True
+    cv_enabled: bool      = False   # True = screen capture + CNN (slow); use for demos only
     image_size: int       = Field(84, ge=32, le=256)    # square HxW for the CNN input
     image_channels: int   = Field(1, ge=1, le=3)         # 1=grayscale, 3=RGB
     frame_stack: int      = Field(4, ge=1, le=8)         # temporal stack fed to NatureCNN

@@ -13,10 +13,6 @@ Usage:
 import argparse
 import os
 import sys
-import wandb
-
-
-
 
 # Workaround for OpenMP duplicate library error
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
@@ -193,6 +189,35 @@ def train(args: argparse.Namespace) -> None:
     env = NoitaEnv(host=cfg.noita_host, port=cfg.noita_base_port)
     env.set_recorder(recorder)
 
+    console.print(
+        f"\n[yellow]Waiting for Noita on port {cfg.noita_base_port}[/] "
+        f"(up to {args.connect_timeout:.0f}s)…"
+    )
+    console.print(
+        "  • Run [cyan]python train.py[/] first, then launch Noita with mod "
+        "[cyan]noitarl[/] enabled.\n"
+        "  • Mod folder: "
+        "[dim]Steam\\steamapps\\common\\Noita\\mods\\noitarl\\[/] "
+        "(copy this repo or symlink).\n"
+        "  • [dim]port.txt[/] in the mod must match NOITA_BASE_PORT "
+        f"({cfg.noita_base_port})."
+    )
+    if not env.wait_for_noita(
+        connect_timeout=args.connect_timeout,
+        state_timeout=args.state_timeout,
+    ):
+        console.print(
+            "\n[bold red]Noita did not connect in time.[/] "
+            "Training was not started.\n"
+            "Check [cyan]mods/noitarl/logger.txt[/] in your Noita install for errors."
+        )
+        recorder.stop()
+        notifier.stop()
+        telemetry.shutdown()
+        sys.exit(1)
+    logger.info("Noita connected — starting PPO")
+    console.print("[green]Noita connected.[/] Starting training…\n")
+
     # ── Model ─────────────────────────────────────────────────────────────────
     if cfg.resume_from:
         logger.info("Resuming from {}", cfg.resume_from)
@@ -330,6 +355,10 @@ def parse_args() -> argparse.Namespace:
                    help="Warm-start: load a BC-trained policy state_dict (.pth) into a "
                         "fresh PPO before model.learn(). Skips value_net keys so the "
                         "PPO critic stays randomly initialised. Implies --fresh.")
+    p.add_argument("--connect-timeout", type=float, default=300.0, metavar="SEC",
+                   help="Max seconds to wait for Noita mod WebSocket (default 300)")
+    p.add_argument("--state-timeout", type=float, default=120.0, metavar="SEC",
+                   help="After connect, max seconds to wait for first live game state")
     return p.parse_args()
 
 

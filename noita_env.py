@@ -383,6 +383,27 @@ class NoitaEnv(gym.Env):
         with self._lock:
             return self._state
 
+    def is_connected(self) -> bool:
+        """True when the Noita mod has an open WebSocket to this env."""
+        with self._lock:
+            return self._ws is not None
+
+    def wait_for_noita(
+        self,
+        connect_timeout: float = 300.0,
+        state_timeout: float = 120.0,
+    ) -> bool:
+        """Block until the mod connects and sends a live (non-dead) state."""
+        deadline = time.monotonic() + connect_timeout
+        while time.monotonic() < deadline:
+            if self.is_connected():
+                break
+            time.sleep(0.25)
+        else:
+            return False
+
+        return self._wait_for_live_state(timeout=state_timeout)
+
     def _wait_for_live_state(self, timeout: float = 30.0) -> bool:
         """Block until a non-dead state arrives from Noita, or timeout."""
         deadline = time.monotonic() + timeout
