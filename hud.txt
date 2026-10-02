@@ -1,0 +1,2 @@
+# Minimal in-game HUD (no flickering wand prob list)
+debug=0

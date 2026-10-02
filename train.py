@@ -196,21 +196,36 @@ def train(args: argparse.Namespace) -> None:
     console.print(
         "  • Run [cyan]python train.py[/] first, then launch Noita with mod "
         "[cyan]noitarl[/] enabled.\n"
+        "  • [bold]Start New Game and enter the world[/] — the main menu does "
+        "not send state.\n"
         "  • Mod folder: "
         "[dim]Steam\\steamapps\\common\\Noita\\mods\\noitarl\\[/] "
         "(copy this repo or symlink).\n"
         "  • [dim]port.txt[/] in the mod must match NOITA_BASE_PORT "
         f"({cfg.noita_base_port})."
     )
-    if not env.wait_for_noita(
+    ok, reason = env.wait_for_noita(
         connect_timeout=args.connect_timeout,
         state_timeout=args.state_timeout,
-    ):
-        console.print(
-            "\n[bold red]Noita did not connect in time.[/] "
-            "Training was not started.\n"
-            "Check [cyan]mods/noitarl/logger.txt[/] in your Noita install for errors."
-        )
+    )
+    if not ok:
+        if reason == "state_timeout":
+            console.print(
+                "\n[bold red]WebSocket connected, but no game state arrived.[/]\n"
+                "Training was [bold]not[/] started — the mod never sent JSON state.\n"
+                "  • New Game [bold]is[/] enough; Python does not wait for a special "
+                "start signal.\n"
+                "  • Open [cyan]mods/noitarl/logger.txt[/] — look for [cyan]DIAG[/] "
+                "(player=yes, step rising) or [cyan]Spawn recorded[/].\n"
+                "  • Fully [cyan]quit and restart Noita[/] after updating the mod, then "
+                "run [cyan]python train.py --fresh[/] again."
+            )
+        else:
+            console.print(
+                "\n[bold red]Noita mod did not connect (WebSocket).[/] "
+                "Training was not started.\n"
+                "Check [cyan]mods/noitarl/logger.txt[/] in your Noita install for errors."
+            )
         recorder.stop()
         notifier.stop()
         telemetry.shutdown()
@@ -290,7 +305,12 @@ def train(args: argparse.Namespace) -> None:
     from callbacks import NoitaMonitorCallback, ThinkingCallback
     monitor_cb = NoitaMonitorCallback(cfg, notifier, verbose=0, recorder=recorder,
                                       telemetry=telemetry)
-    thinking_cb = ThinkingCallback()
+    callback_list = [monitor_cb]
+    if cfg.hud_debug_overlay:
+        callback_list.append(ThinkingCallback())
+        console.print("  HUD debug: [yellow]wand probs + radar[/] (HUD_DEBUG_OVERLAY=true)")
+    else:
+        console.print("  HUD debug: [dim]off[/] (minimal in-game overlay)")
 
     checkpoint_cb = CheckpointCallback(
         save_freq   = max(cfg.checkpoint_freq // 1, 1),
@@ -300,7 +320,8 @@ def train(args: argparse.Namespace) -> None:
     )
     azure_ckpt_cb = AzureCheckpointCallback(telemetry, checkpoint_dir=cfg.checkpoint_dir)
 
-    callbacks = CallbackList([monitor_cb, thinking_cb, checkpoint_cb, azure_ckpt_cb])
+    callback_list.extend([checkpoint_cb, azure_ckpt_cb])
+    callbacks = CallbackList(callback_list)
 
     # ── Train ─────────────────────────────────────────────────────────────────
     console.rule(f"[bold green]NoitaRL — {run_name}")

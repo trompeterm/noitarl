@@ -311,7 +311,15 @@ class NoitaEnv(gym.Env):
             self._loop = loop
 
             async def _serve() -> None:
-                async with websockets.serve(self._handle, self.host, self.port):
+                # pollnet is a minimal WS client: no permessage-deflate, no pong replies.
+                async with websockets.serve(
+                    self._handle,
+                    self.host,
+                    self.port,
+                    compression=None,
+                    ping_interval=None,
+                    ping_timeout=None,
+                ):
                     ready.set()
                     await asyncio.Future()   # run forever
 
@@ -336,14 +344,28 @@ class NoitaEnv(gym.Env):
                 return
             self._ws = ws
         logger.info("[env:{}] Noita connected from {}", self.port, addr)
+        # Some pollnet builds only mark the socket "open" after server→client traffic.
+        try:
+            await ws.send(json.dumps({"action": [0, 0, 0, 0, 0]}))
+        except Exception as exc:
+            logger.warning("[env:{}] Initial action ping failed: {}", self.port, exc)
         try:
             async for raw in ws:
                 try:
                     state = json.loads(raw)
                     with self._lock:
                         self._state = state
+                    if not getattr(self, "_logged_first_state", False):
+                        self._logged_first_state = True
+                        logger.info(
+                            "[env:{}] First JSON state from mod ({} bytes, frame={})",
+                            self.port, len(raw), state.get("frame"),
+                        )
                 except json.JSONDecodeError as exc:
-                    logger.warning("[env:{}] Bad JSON from Noita: {}", self.port, exc)
+                    logger.warning(
+                        "[env:{}] Bad JSON from Noita ({} bytes): {}",
+                        self.port, len(raw), exc,
+                    )
         except websockets.exceptions.ConnectionClosed as exc:
             logger.warning("[env:{}] Noita disconnected: {}", self.port, exc)
         finally:
@@ -392,25 +414,45 @@ class NoitaEnv(gym.Env):
         self,
         connect_timeout: float = 300.0,
         state_timeout: float = 120.0,
-    ) -> bool:
-        """Block until the mod connects and sends a live (non-dead) state."""
+    ) -> tuple[bool, str]:
+        """Block until the mod connects and sends a live (non-dead) state.
+
+        Returns (ok, reason). reason is empty when ok is True.
+        """
         deadline = time.monotonic() + connect_timeout
         while time.monotonic() < deadline:
             if self.is_connected():
                 break
             time.sleep(0.25)
         else:
-            return False
+            return False, "connect_timeout"
 
-        return self._wait_for_live_state(timeout=state_timeout)
+        logger.info(
+            "[env:{}] WebSocket client connected — waiting up to {:.0f}s for "
+            "game state (start New Game and enter the world)",
+            self.port, state_timeout,
+        )
+        if self._wait_for_live_state(timeout=state_timeout):
+            return True, ""
+        return False, "state_timeout"
 
     def _wait_for_live_state(self, timeout: float = 30.0) -> bool:
         """Block until a non-dead state arrives from Noita, or timeout."""
         deadline = time.monotonic() + timeout
+        next_log = time.monotonic() + 15.0
         while time.monotonic() < deadline:
             s = self._get_state()
             if s is not None and not s.get("dead", False):
                 return True
+            now = time.monotonic()
+            if now >= next_log:
+                logger.info(
+                    "[env:{}] Still waiting for first JSON state from mod "
+                    "(need any live frame, not a special game-start event). "
+                    "Check mods/noitarl/logger.txt for DIAG lines.",
+                    self.port,
+                )
+                next_log = now + 15.0
             time.sleep(0.1)
         return False
 

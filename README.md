@@ -103,6 +103,8 @@ python wait_for_noita.py
 
 Then start Noita → mod enabled → **New Game** → enter the world (not only the title screen).
 
+If Python says **WebSocket connected** but training never starts, you are probably still on the **main menu** — the mod only streams state when a **player exists in a run**.
+
 Success:
 
 ```text

@@ -64,8 +64,42 @@ local function read_port()
     return 5001
 end
 local WS_PORT = read_port()
-local WS_URL  = "ws://localhost:" .. WS_PORT
+local WS_URL  = "ws://127.0.0.1:" .. WS_PORT
 info("Port: " .. WS_PORT)
+
+-- Optional spawn_override.txt: one line "x, y" (see spawn_override.txt.example).
+local function read_spawn_override()
+    local f = io.open(mod_path("spawn_override.txt"), "r")
+    if not f then return nil, nil end
+    local line = f:read("*l")
+    f:close()
+    if not line or line == "" then return nil, nil end
+    local xs, ys = line:match("^%s*([%-%d%.]+)%s*[,;%s]%s*([%-%d%.]+)")
+    if xs and ys then
+        return tonumber(xs), tonumber(ys)
+    end
+    return nil, nil
+end
+
+local HUD_DEBUG = false
+local function read_hud_config()
+    local f = io.open(mod_path("hud.txt"), "r")
+    if not f then return end
+    for line in f:lines() do
+        line = line:gsub("#.*", "")
+        local k, v = line:match("^%s*([%w_]+)%s*=%s*(%d+)")
+        if k == "debug" and tonumber(v) == 1 then
+            HUD_DEBUG = true
+        end
+    end
+    f:close()
+end
+read_hud_config()
+if HUD_DEBUG then
+    info("HUD debug overlay enabled (hud.txt debug=1)")
+else
+    info("HUD minimal mode (set hud.txt debug=1 for wand probs + radar)")
+end
 
 -- ── Optional game-speed multiplier (noita_dev.exe only) ───────────────────
 -- Read from speed.txt next to this mod. Values > 1 run the simulation faster.
@@ -202,6 +236,23 @@ local episode_steps         = 0
 local frame_times           = {}   -- rolling window for FPS estimate
 
 local PERF_WINDOW           = 60
+local ws_last_diag          = 0   -- os.clock() of last bridge diagnostic line
+local bridge_tick           = 0   -- increments every post-update (not GameGetFrameNum)
+
+local function get_player_entity()
+    local ok, ents = pcall(EntityGetWithTag, "player_unit")
+    if ok and type(ents) == "table" and ents[1] then
+        return ents[1]
+    end
+    return nil
+end
+
+-- pollnet often reports "opening" after Python websockets already accepted the
+-- client; treating only "open" as usable blocked all state sends (Step:0 forever).
+local function socket_usable(st)
+    return st ~= "error" and st ~= "closed" and st ~= "invalid"
+        and st ~= "invalid_handle"
+end
 
 -- Action trace log (one line per applied action) for offline debugging
 local LOG_FILE_ACTIONS      = mod_path("actions_trace.jsonl")
@@ -797,7 +848,7 @@ end
 -- ── Pre-update: apply buffered action BEFORE physics ─────────────────────
 function OnWorldPreUpdate()
     if not RaytracePlatforms then return end
-    local player = EntityGetWithTag("player_unit")[1]
+    local player = get_player_entity()
     if player then apply_action(player, pending_action) end
 end
 
@@ -806,7 +857,6 @@ function OnWorldPostUpdate()
     if not RaytracePlatforms then return end
 
     local frame  = GameGetFrameNum()
-    local player = EntityGetWithTag("player_unit")[1]
 
     -- Simple FPS estimate for diagnostic logging
     local now = os.clock()
@@ -861,6 +911,13 @@ function OnWorldPostUpdate()
     end
 
     local st = socket:status()
+    -- Finish WS handshake within this frame if pollnet is still "opening".
+    local drain = 0
+    while st == "opening" and drain < 16 do
+        pcall(socket.poll, socket)
+        st = socket:status()
+        drain = drain + 1
+    end
 
     if st == "error" then
         consecutive_errors = consecutive_errors + 1
@@ -911,11 +968,33 @@ function OnWorldPostUpdate()
         end
     end
 
-    if st ~= "open" then return end
-    if not player then return end
+    if HUD_DEBUG or episode_steps == 0 or not socket_usable(st) then
+        if now - ws_last_diag >= 3.0 then
+            ws_last_diag = now
+            local pl = get_player_entity()
+            info(string.format(
+                "DIAG ws st=%s player=%s ep=%d step=%d gframe=%d gmod4=%d tick=%d",
+                tostring(st), pl and "yes" or "no", episode_num, episode_steps,
+                frame, frame % FRAME_SKIP, bridge_tick))
+        end
+    end
 
-    -- Frame skip: build/send state only every FRAME_SKIP frames ───────────
-    if (frame % FRAME_SKIP) ~= 0 then return end
+    if not socket_usable(st) then
+        return
+    end
+
+    local player = get_player_entity()
+    if not player then
+        return
+    end
+
+    -- Frame skip on our own tick — GameGetFrameNum() can stall (pause / spawn
+    -- fade) while OnWorldPostUpdate still runs, leaving gframe%%4 never 0 forever.
+    bridge_tick = bridge_tick + 1
+    local is_action_frame = (bridge_tick % FRAME_SKIP) == 0
+    if not is_action_frame and episode_steps > 0 then
+        return
+    end
 
     -- Player state ─────────────────────────────────────────────────────────
     local x, y
@@ -925,7 +1004,11 @@ function OnWorldPostUpdate()
         x, y = ex, ey
     end
 
-    local cdata = EntityGetFirstComponent(player, "CharacterDataComponent")
+    local cdata = nil
+    do
+        local ok_c, cd = pcall(EntityGetFirstComponent, player, "CharacterDataComponent")
+        if ok_c then cdata = cd end
+    end
 
     if not spawn_x then
         local target_x, target_y
@@ -968,6 +1051,7 @@ function OnWorldPostUpdate()
         spawn_candidates[#spawn_candidates + 1] = { x = target_x, y = target_y }
         initial_descent_done = true
         episode_num = 1
+        pcall(GameSetCameraFree, false)
 
         -- Reflect the teleport in this frame's state so observation is correct
         x, y = target_x, target_y
@@ -975,7 +1059,11 @@ function OnWorldPostUpdate()
 
     -- Virtual-HP system: keep engine HP at IMMORTAL_HP so Noita never kills
     -- the player entity; track damage in virtual_hp ourselves.
-    local dmg = EntityGetFirstComponent(player, "DamageModelComponent")
+    local dmg = nil
+    do
+        local ok_d, d = pcall(EntityGetFirstComponent, player, "DamageModelComponent")
+        if ok_d then dmg = d end
+    end
     if dmg then
         cset(dmg, "max_hp", IMMORTAL_HP)
         local engine_hp = cget(dmg, "hp") or IMMORTAL_HP
@@ -1045,22 +1133,26 @@ function OnWorldPostUpdate()
 
     -- Current gold and kill count for reward tracking in Python
     local gold = 0
-    local wallet = EntityGetFirstComponent(player, "WalletComponent")
+    local wallet = nil
+    do
+        local ok_w, w = pcall(EntityGetFirstComponent, player, "WalletComponent")
+        if ok_w then wallet = w end
+    end
     if wallet then gold = cget(wallet, "money") or 0 end
 
     local ok_st, k_str = pcall(StatsGetValue, "enemies_killed")
     local kills = (ok_st and k_str) and tonumber(k_str) or 0
 
-    -- Draw radar ───────────────────────────────────────────────────────────
-    GuiIdPushString(gui, "rl_radar")
-    draw_radar(gui, 10, 24, rays, hud_saliency)
-    GuiIdPop(gui)
-
-    -- Draw probabilities ──────────────────────────────────────────────────
-    if #hud_probs > 0 then
-        GuiIdPushString(gui, "rl_probs")
-        draw_probs(gui, 10, 55, hud_probs)
+    -- Debug overlay (wand probs + ray radar) — off by default; see hud.txt
+    if HUD_DEBUG and gui then
+        GuiIdPushString(gui, "rl_radar")
+        draw_radar(gui, 10, 24, rays, hud_saliency)
         GuiIdPop(gui)
+        if #hud_probs > 0 then
+            GuiIdPushString(gui, "rl_probs")
+            draw_probs(gui, 10, 55, hud_probs)
+            GuiIdPop(gui)
+        end
     end
 
     episode_steps = episode_steps + 1
@@ -1151,6 +1243,10 @@ function OnWorldPostUpdate()
             end
         else
             consecutive_errors = 0
+            if episode_steps <= 1 then
+                info(string.format("State sent to Python (%d bytes)", #encoded))
+            end
+            for _ = 1, 3 do pcall(socket.poll, socket) end
         end
     else
         warn("json.encode failed: " .. tostring(encoded))

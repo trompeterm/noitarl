@@ -1,0 +1,3 @@
+# Optional: one line "x, y" world coordinates (disables auto-descent into mines).
+# Copy to spawn_override.txt only if you hand-verified coords for your seed.
+# -918, -40

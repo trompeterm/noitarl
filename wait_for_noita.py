@@ -34,9 +34,16 @@ def main() -> None:
     console.print(f"[cyan]Listening on port {port}[/] — launch Noita with mod [bold]noitarl[/] enabled.")
     env = NoitaEnv(host=cfg.noita_host, port=port)
     try:
-        if env.wait_for_noita(connect_timeout=args.timeout, state_timeout=120.0):
+        ok, reason = env.wait_for_noita(connect_timeout=args.timeout, state_timeout=120.0)
+        if ok:
             console.print("[green]OK:[/] Noita connected and sending state.")
             sys.exit(0)
+        if reason == "state_timeout":
+            console.print(
+                "[red]WebSocket OK but no game state[/] — start [bold]New Game[/] "
+                "and enter the world (not the main menu), then retry."
+            )
+            sys.exit(1)
         console.print(
             "[red]Timed out[/] — no connection.\n"
             "  • Start [cyan]wait_for_noita.py[/] *before* launching Noita.\n"

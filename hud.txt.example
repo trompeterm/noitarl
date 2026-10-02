@@ -1,0 +1,5 @@
+# Copy to hud.txt in the mod folder to customize the in-game overlay.
+# debug=0  — minimal HUD (recommended for watching training)
+# debug=1  — show wand probability list + ray radar (dev; can flicker)
+
+debug=0

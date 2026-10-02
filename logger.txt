@@ -1,11 +1,25 @@
-[16:07:40] [INFO ] Mod init started — noitarl v0.5 (MultiDiscrete action space, perfect-aim hitscan, force-aim every frame)
-[16:07:40] [INFO ] Port: 5001
-[16:07:49] [INFO ] Connecting → ws://localhost:5001
-[16:07:53] [WARN ] Socket error #1 — will reconnect
-[16:07:53] [INFO ] Connecting → ws://localhost:5001
-[16:07:57] [WARN ] Socket error #1 — will reconnect
-[16:07:57] [INFO ] Connecting → ws://localhost:5001
-[16:08:01] [WARN ] Socket error #1 — will reconnect
-[16:08:01] [INFO ] Connecting → ws://localhost:5001
-[16:08:05] [WARN ] Socket error #1 — will reconnect
-[16:08:05] [INFO ] Connecting → ws://localhost:5001
+[10:56:49] [INFO ] Mod init started — noitarl v0.5 (MultiDiscrete action space, perfect-aim hitscan, force-aim every frame)
+[10:56:49] [INFO ] Port: 5001
+[10:56:49] [INFO ] HUD minimal mode (set hud.txt debug=1 for wand probs + radar)
+[10:57:02] [INFO ] Connecting → ws://127.0.0.1:5001
+[10:57:02] [INFO ] DIAG ws st=open player=yes ep=0 step=0 gframe=182 gmod4=2 tick=0
+[10:57:02] [INFO ] Spawn recorded (227, 321) — descended from surface (227, -79)
+[10:57:02] [INFO ] Ep 1 ended  steps=1  reason=DEAD  pos=(227,321)  vhp=-9992.000
+[10:57:02] [INFO ] Ep 2 started — spawn (239, 321) [pool=1]
+[10:57:02] [INFO ] State sent to Python (693 bytes)
+[10:57:23] [INFO ] Ep 2 ended  steps=229  reason=DEAD  pos=(239,321)  vhp=-0.900
+[10:57:23] [INFO ] Ep 3 started — spawn (242, 321) [pool=1]
+[10:57:23] [INFO ] DIAG ws st=open player=yes ep=3 step=0 gframe=1094 gmod4=2 tick=912
+[10:57:23] [INFO ] State sent to Python (671 bytes)
+[10:59:27] [INFO ] Force-respawn requested by Python (cowardice truncation)
+[10:59:27] [INFO ] Ep 3 ended  steps=1290  reason=DEAD  pos=(92,183)  vhp=0.000
+[10:59:27] [INFO ] Ep 4 started — spawn (237, 321) [pool=1]
+[10:59:27] [INFO ] DIAG ws st=open player=yes ep=4 step=0 gframe=6250 gmod4=2 tick=6068
+[10:59:27] [INFO ] State sent to Python (834 bytes)
+[11:02:11] [INFO ] Ep 4 ended  steps=1374  reason=DEAD  pos=(408,573)  vhp=-196.000
+[11:02:11] [INFO ] Ep 5 started — spawn (241, 321) [pool=1]
+[11:02:11] [INFO ] DIAG ws st=open player=yes ep=5 step=0 gframe=11742 gmod4=2 tick=11560
+[11:02:11] [INFO ] State sent to Python (807 bytes)
+[11:02:13] [INFO ] Ep 5 ended  steps=24  reason=DEAD  pos=(249,307)  vhp=-196.000
+[11:02:13] [INFO ] Ep 6 started — spawn (231, 321) [pool=1]
+[11:02:13] [INFO ] State sent to Python (850 bytes)
